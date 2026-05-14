@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(awk -F'\\\\t' 'NR>1 {print $1}' \"D:\\\\GitHub\\\\visualisasi-peminat-ptnbh\\\\data.txt\")"
+    ]
+  }
+}

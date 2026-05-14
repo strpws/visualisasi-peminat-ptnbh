@@ -1,0 +1,630 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Visualisasi Peminat PTN-BH (SNBT-UTBK)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Lora:wght@400;700&family=PT+Sans:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0;
+    width: 100%; height: 100%;
+    background: #ffffff;
+    color: #000;
+    font-family: 'Lora', Georgia, "Times New Roman", serif;
+    font-weight: 400;
+    overflow: hidden;
+  }
+  #globeViz { position: absolute; inset: 0; }
+
+  #panel {
+    position: absolute;
+    top: 22px; left: 22px;
+    z-index: 10;
+    width: 360px;
+    max-width: calc(100vw - 44px);
+    background: #ffffff;
+    border: 1px solid #e6e6e6;
+    border-radius: 3px;
+    padding: 22px 22px 18px;
+    box-shadow: 0 6px 24px rgba(0, 0, 0, 0.08);
+  }
+
+  .keyword {
+    font-family: 'PT Sans', sans-serif;
+    font-weight: 700;
+    text-transform: uppercase;
+    color: #c92b2c;
+    letter-spacing: 0.1em;
+    font-size: 11px;
+    margin-bottom: 10px;
+  }
+
+  #panel h1 {
+    margin: 0 0 8px;
+    font-family: 'Lora', Georgia, serif;
+    font-weight: 700;
+    font-size: 24px;
+    line-height: 1.22;
+    color: #000;
+  }
+  #panel .subtitle {
+    margin: 0 0 18px;
+    font-family: 'Lora', Georgia, serif;
+    font-weight: 400;
+    font-size: 13px;
+    line-height: 1.5;
+    color: #444;
+  }
+
+  .mode-toggle {
+    display: flex;
+    background: #f2f2f2;
+    border-radius: 3px;
+    padding: 3px;
+    margin-bottom: 14px;
+  }
+  .mode-toggle button {
+    flex: 1;
+    background: transparent;
+    border: none;
+    font-family: 'PT Sans', sans-serif;
+    font-weight: 400;
+    color: #666;
+    padding: 8px 10px;
+    font-size: 12px;
+    cursor: pointer;
+    border-radius: 2px;
+    transition: all 0.15s;
+  }
+  .mode-toggle button.active {
+    background: #00599A;
+    color: #fff;
+    font-weight: 700;
+  }
+  .mode-toggle button:not(.active):hover {
+    background: rgba(0, 0, 0, 0.04);
+    color: #000;
+  }
+
+  label.field {
+    display: block;
+    font-family: 'PT Sans', sans-serif;
+    font-weight: 700;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: #666;
+    margin-bottom: 6px;
+  }
+  select {
+    width: 100%;
+    padding: 10px 12px;
+    background: #f7f7f7;
+    color: #000;
+    border: 1px solid #dcdcdc;
+    border-radius: 3px;
+    font-family: 'PT Sans', sans-serif;
+    font-weight: 400;
+    font-size: 13px;
+    cursor: pointer;
+    appearance: none;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'><path fill='%23000' opacity='0.55' d='M6 8L2 4h8z'/></svg>");
+    background-repeat: no-repeat;
+    background-position: right 12px center;
+    padding-right: 32px;
+  }
+  select:focus {
+    outline: none;
+    border-color: #00599A;
+  }
+  select option { background: #fff; color: #000; }
+
+  #stats {
+    margin-top: 16px;
+    padding-top: 14px;
+    border-top: 1px solid #eeeeee;
+  }
+  .stat-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    padding: 4px 0;
+    font-family: 'PT Sans', sans-serif;
+    font-size: 13px;
+  }
+  .stat-row .label {
+    font-weight: 400;
+    color: #555;
+  }
+  .stat-row .value {
+    font-weight: 700;
+    color: #000;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .top-list {
+    margin-top: 12px;
+  }
+  .top-list .head {
+    font-family: 'PT Sans', sans-serif;
+    font-weight: 700;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: #888;
+    margin-bottom: 6px;
+  }
+  .top-item {
+    display: grid;
+    grid-template-columns: 18px 1fr auto auto;
+    gap: 8px;
+    align-items: center;
+    padding: 3px 0;
+    font-family: 'PT Sans', sans-serif;
+    font-size: 12px;
+  }
+  .top-item .rank {
+    font-weight: 400;
+    color: #aaa;
+    font-variant-numeric: tabular-nums;
+  }
+  .top-item .name {
+    font-weight: 400;
+    color: #000;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .top-item .count {
+    font-weight: 700;
+    color: #00599A;
+    font-variant-numeric: tabular-nums;
+  }
+  .top-item .pct {
+    font-weight: 400;
+    color: #666;
+    font-variant-numeric: tabular-nums;
+    font-size: 11px;
+    min-width: 40px;
+    text-align: right;
+  }
+
+  #footer {
+    position: absolute;
+    bottom: 14px; left: 24px;
+    z-index: 10;
+    font-family: 'PT Sans', sans-serif;
+    font-weight: 400;
+    font-size: 11px;
+    color: #777;
+  }
+  #footer a { color: #00599A; text-decoration: none; }
+  #footer a:hover { text-decoration: underline; }
+
+  #loading {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #ffffff;
+    z-index: 100;
+    font-family: 'PT Sans', sans-serif;
+    color: #888;
+    font-size: 13px;
+    transition: opacity 0.5s;
+  }
+  #loading.hidden { opacity: 0; pointer-events: none; }
+
+  /* Globe.gl tooltip override */
+  .scene-tooltip {
+    font-family: 'PT Sans', sans-serif !important;
+    font-size: 12px !important;
+    background: #ffffff !important;
+    border: 1px solid #dcdcdc !important;
+    border-left: 3px solid #00599A !important;
+    border-radius: 2px !important;
+    padding: 8px 11px !important;
+    color: #000 !important;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.12) !important;
+    pointer-events: none;
+  }
+  .scene-tooltip b { font-weight: 700; }
+</style>
+</head>
+<body>
+
+<div id="globeViz"></div>
+
+<div id="panel">
+  <div class="keyword">Visualisasi Data</div>
+  <h1>Peminat PTN-BH SNBT-UTBK</h1>
+  <p class="subtitle">Aliran pendaftar antar provinsi dan universitas</p>
+
+  <div class="mode-toggle" id="modeToggle">
+    <button data-mode="byUni" class="active">Per Universitas</button>
+    <button data-mode="byProv">Per Provinsi</button>
+  </div>
+
+  <label class="field" id="selectorLabel">Pilih universitas</label>
+  <select id="selector"></select>
+
+  <div id="stats"></div>
+</div>
+
+<div id="footer">
+  Sumber: SNBT-UTBK 2024 &middot; Drag untuk memutar globe, scroll untuk zoom
+</div>
+
+<div id="loading">Memuat globe…</div>
+
+<script src="https://unpkg.com/three@0.158.0/build/three.min.js"></script>
+<script src="https://unpkg.com/globe.gl@2.32.0/dist/globe.gl.min.js"></script>
+<script src="data.js"></script>
+<script>
+(function () {
+  'use strict';
+
+  const ARC_COLOR_START = 'rgba(0, 89, 154, 0.55)';    // Kompas blue, translucent
+  const ARC_COLOR_END   = 'rgba(243, 199, 39, 0.55)';  // gold, translucent
+  const POINT_PROVINCE  = '#00599A';
+  const POINT_UNIVERSITY = '#F3C727';
+
+  let mode = 'byUni';         // 'byUni' | 'byProv'
+  let selection = UNIVERSITIES[9]; // start with UI (Universitas Indonesia)
+
+  // Build globe — light editorial palette (white bg, grey map)
+  const world = Globe()
+    (document.getElementById('globeViz'))
+    .backgroundColor('#ffffff')
+    .globeMaterial(new THREE.MeshBasicMaterial({ color: 0xffffff }))
+    .showAtmosphere(false)
+    .pointAltitude(d => d.size)
+    .pointRadius(d => d.radius)
+    .pointColor(d => d.color)
+    .pointLabel(d => d.label)
+    .polygonAltitude(0.004)
+    .polygonCapColor(() => '#e3e3e3')
+    .polygonSideColor(() => 'rgba(0, 0, 0, 0)')
+    .polygonStrokeColor(() => 'rgba(0, 0, 0, 0.2)')
+    .customLayerData([])
+    .customThreeObject(d => buildTaperedArc(d))
+    .customLayerLabel(d => d.label);
+
+  // ---------- Tapered arc builder ----------
+  // Replaces Globe.gl's constant-width arcs with custom tubes:
+  // thin at origin, thickest at apex (= pendaftar magnitude), pointy at destination.
+  const COLOR_BLUE = new THREE.Color(0x00599A);
+  const COLOR_GOLD = new THREE.Color(0xF3C727);
+  const ARC_AUTOSCALE = 0.4;
+  const ARC_OPACITY = 0.6;
+  const PATH_SEGS = 48;
+  const RAD_SEGS = 12;
+
+  function slerpLatLng(lat1, lng1, lat2, lng2, t) {
+    const k = Math.PI / 180;
+    const a1 = lat1 * k, b1 = lng1 * k, a2 = lat2 * k, b2 = lng2 * k;
+    const x1 = Math.cos(a1) * Math.cos(b1), y1 = Math.cos(a1) * Math.sin(b1), z1 = Math.sin(a1);
+    const x2 = Math.cos(a2) * Math.cos(b2), y2 = Math.cos(a2) * Math.sin(b2), z2 = Math.sin(a2);
+    const d = Math.max(-1, Math.min(1, x1 * x2 + y1 * y2 + z1 * z2));
+    const w = Math.acos(d);
+    const sw = Math.sin(w);
+    if (sw < 1e-9) return [lat1, lng1];
+    const A = Math.sin((1 - t) * w) / sw;
+    const B = Math.sin(t * w) / sw;
+    const x = A * x1 + B * x2, y = A * y1 + B * y2, z = A * z1 + B * z2;
+    return [Math.atan2(z, Math.hypot(x, y)) / k, Math.atan2(y, x) / k];
+  }
+
+  function angularDistance(lat1, lng1, lat2, lng2) {
+    const k = Math.PI / 180;
+    const da = (lat2 - lat1) * k, db = (lng2 - lng1) * k;
+    const a = Math.sin(da / 2) ** 2 + Math.cos(lat1 * k) * Math.cos(lat2 * k) * Math.sin(db / 2) ** 2;
+    return 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  }
+
+  function buildTaperedArc(d) {
+    const { startLat, startLng, endLat, endLng, peakStroke } = d;
+    const angDist = angularDistance(startLat, startLng, endLat, endLng);
+    const peakAlt = (angDist / Math.PI) * ARC_AUTOSCALE;
+
+    // Build path with parabolic altitude
+    const pts = [];
+    for (let i = 0; i <= PATH_SEGS; i++) {
+      const t = i / PATH_SEGS;
+      const [lat, lng] = slerpLatLng(startLat, startLng, endLat, endLng, t);
+      const alt = peakAlt * 4 * t * (1 - t);
+      const c = world.getCoords(lat, lng, alt);
+      pts.push(new THREE.Vector3(c.x, c.y, c.z));
+    }
+
+    const curve = new THREE.CatmullRomCurve3(pts);
+    const frames = curve.computeFrenetFrames(PATH_SEGS, false);
+
+    const positions = [];
+    const colors = [];
+    const indices = [];
+
+    for (let i = 0; i <= PATH_SEGS; i++) {
+      const t = i / PATH_SEGS;
+      const p = pts[i];
+      // Full width from origin through apex, then taper smoothly to a point at destination
+      const r = t <= 0.5
+        ? peakStroke
+        : peakStroke * Math.cos((t - 0.5) * Math.PI);
+      const N = frames.normals[i];
+      const B = frames.binormals[i];
+      const col = COLOR_BLUE.clone().lerp(COLOR_GOLD, t);
+
+      for (let j = 0; j < RAD_SEGS; j++) {
+        const a = (j / RAD_SEGS) * Math.PI * 2;
+        const ca = Math.cos(a), sa = Math.sin(a);
+        positions.push(
+          p.x + r * (N.x * ca + B.x * sa),
+          p.y + r * (N.y * ca + B.y * sa),
+          p.z + r * (N.z * ca + B.z * sa)
+        );
+        colors.push(col.r, col.g, col.b);
+      }
+    }
+
+    for (let i = 0; i < PATH_SEGS; i++) {
+      for (let j = 0; j < RAD_SEGS; j++) {
+        const a = i * RAD_SEGS + j;
+        const b = i * RAD_SEGS + ((j + 1) % RAD_SEGS);
+        const c = (i + 1) * RAD_SEGS + j;
+        const dd = (i + 1) * RAD_SEGS + ((j + 1) % RAD_SEGS);
+        indices.push(a, b, dd, a, dd, c);
+      }
+    }
+
+    const geom = new THREE.BufferGeometry();
+    geom.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+    geom.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+    geom.setIndex(indices);
+
+    const mat = new THREE.MeshBasicMaterial({
+      vertexColors: true,
+      transparent: true,
+      opacity: ARC_OPACITY,
+      side: THREE.DoubleSide,
+      depthWrite: false
+    });
+
+    return new THREE.Mesh(geom, mat);
+  }
+
+  // Indonesia-only province polygons (small + high-fidelity for the focus region).
+  const GEO_SOURCES = [
+    'https://cdn.jsdelivr.net/gh/superpikar/indonesia-geojson@master/indonesia-province-simple.json',
+    'https://cdn.jsdelivr.net/gh/superpikar/indonesia-geojson@master/indonesia-province.json',
+    'https://cdn.jsdelivr.net/gh/superpikar/indonesia-geojson@master/indonesia.geojson'
+  ];
+
+  (async () => {
+    for (const url of GEO_SOURCES) {
+      try {
+        const geo = await fetch(url).then(r => r.ok ? r.json() : Promise.reject());
+        world.polygonsData(geo.features);
+        break;
+      } catch (_) { /* try next source */ }
+    }
+    document.getElementById('loading').classList.add('hidden');
+  })();
+
+  // Safety: hide loader even if all fetches stall
+  setTimeout(() => document.getElementById('loading').classList.add('hidden'), 6000);
+
+  // Initial camera: tight on Indonesia
+  world.pointOfView({ lat: -2.5, lng: 117, altitude: 0.38 }, 0);
+
+  // Auto-rotate (slow), stop on user interaction
+  const controls = world.controls();
+  controls.autoRotate = true;
+  controls.autoRotateSpeed = 0.35;
+  ['mousedown', 'touchstart', 'wheel'].forEach(ev =>
+    document.getElementById('globeViz').addEventListener(ev, () => controls.autoRotate = false, { passive: true })
+  );
+
+  // Resize handling
+  function resize() { world.width(window.innerWidth).height(window.innerHeight); }
+  window.addEventListener('resize', resize);
+  resize();
+
+  // ---------- UI ----------
+  const selector = document.getElementById('selector');
+  const selectorLabel = document.getElementById('selectorLabel');
+  const statsEl = document.getElementById('stats');
+
+  function populateSelector() {
+    selector.innerHTML = '';
+    const items = (mode === 'byUni')
+      ? UNIVERSITIES.map(u => ({ value: u, label: `${UNIVERSITY_COORDS[u].short} — ${titleCase(u)}` }))
+      : PROVINCES.map(p => ({ value: p, label: p }));
+
+    for (const it of items) {
+      const opt = document.createElement('option');
+      opt.value = it.value;
+      opt.textContent = it.label;
+      selector.appendChild(opt);
+    }
+    selector.value = selection;
+  }
+
+  function titleCase(s) {
+    return s.toLowerCase().replace(/\b\w/g, c => c.toUpperCase())
+            .replace(/\bDi\b/, 'di').replace(/\bDan\b/, 'dan');
+  }
+
+  document.getElementById('modeToggle').addEventListener('click', e => {
+    const btn = e.target.closest('button[data-mode]');
+    if (!btn) return;
+    if (btn.dataset.mode === mode) return;
+    mode = btn.dataset.mode;
+    document.querySelectorAll('#modeToggle button').forEach(b =>
+      b.classList.toggle('active', b.dataset.mode === mode));
+    selectorLabel.textContent = mode === 'byUni' ? 'Pilih universitas' : 'Pilih provinsi';
+    selection = (mode === 'byUni') ? UNIVERSITIES[9] : 'Jawa Barat';
+    populateSelector();
+    update();
+  });
+
+  selector.addEventListener('change', () => {
+    selection = selector.value;
+    update();
+  });
+
+  // ---------- Render ----------
+  function update() {
+    if (mode === 'byUni') renderByUniversity(selection);
+    else                  renderByProvince(selection);
+  }
+
+  function renderByUniversity(uni) {
+    const dest = UNIVERSITY_COORDS[uni];
+    const total = universityTotal(uni);
+
+    const rows = PROVINCES.map(p => {
+      const c = countFor(uni, p);
+      return { province: p, count: c, pct: total ? (c / total * 100) : 0 };
+    }).filter(r => r.count > 0);
+
+    const maxCount = rows.reduce((m, r) => Math.max(m, r.count), 1);
+
+    const arcs = rows.map(r => {
+      const origin = PROVINCE_COORDS[r.province];
+      return {
+        startLat: origin.lat, startLng: origin.lng,
+        endLat:   dest.lat,   endLng:   dest.lng,
+        peakStroke: 0.15 + 1.1 * (r.count / maxCount),
+        label: `<b>${r.province} → ${UNIVERSITY_COORDS[uni].short}</b><br>${r.count.toLocaleString('id-ID')} pendaftar (${r.pct.toFixed(1)}%)`
+      };
+    });
+
+    const points = [
+      ...rows.map(r => {
+        const o = PROVINCE_COORDS[r.province];
+        return {
+          lat: o.lat, lng: o.lng,
+          size: 0.001,
+          radius: 0.015 + 0.05 * Math.sqrt(r.count / maxCount),
+          color: POINT_PROVINCE,
+          label: `<b>${r.province}</b><br>${r.count.toLocaleString('id-ID')} pendaftar ke ${UNIVERSITY_COORDS[uni].short}`
+        };
+      }),
+      {
+        lat: dest.lat, lng: dest.lng,
+        size: 0.001, radius: 0.06,
+        color: POINT_UNIVERSITY,
+        label: `<b>${titleCase(uni)}</b><br>${dest.city} &middot; total ${total.toLocaleString('id-ID')} pendaftar`
+      }
+    ];
+
+    world.customLayerData(arcs).pointsData(points);
+    flyTo(dest.lat, dest.lng);
+    renderStatsByUni(uni, rows, total);
+  }
+
+  function renderByProvince(prov) {
+    const origin = PROVINCE_COORDS[prov];
+    const provTotal = PROVINCE_TOTALS[prov];
+
+    const rows = UNIVERSITIES.map(u => {
+      const c = countFor(u, prov);
+      return { university: u, count: c };
+    }).filter(r => r.count > 0);
+
+    const fromProv = rows.reduce((s, r) => s + r.count, 0);
+    const maxCount = rows.reduce((m, r) => Math.max(m, r.count), 1);
+
+    const arcs = rows.map(r => {
+      const dest = UNIVERSITY_COORDS[r.university];
+      const pctOfProv = fromProv ? (r.count / fromProv * 100) : 0;
+      return {
+        startLat: origin.lat, startLng: origin.lng,
+        endLat:   dest.lat,   endLng:   dest.lng,
+        peakStroke: 0.15 + 1.1 * (r.count / maxCount),
+        label: `<b>${prov} → ${dest.short}</b><br>${r.count.toLocaleString('id-ID')} pendaftar (${pctOfProv.toFixed(1)}% pilihan dari prov.)`
+      };
+    });
+
+    const points = [
+      {
+        lat: origin.lat, lng: origin.lng,
+        size: 0.001, radius: 0.07,
+        color: POINT_PROVINCE,
+        label: `<b>${prov}</b><br>Total ${provTotal.toLocaleString('id-ID')} pendaftar nasional`
+      },
+      ...rows.map(r => {
+        const d = UNIVERSITY_COORDS[r.university];
+        return {
+          lat: d.lat, lng: d.lng,
+          size: 0.001,
+          radius: 0.015 + 0.05 * Math.sqrt(r.count / maxCount),
+          color: POINT_UNIVERSITY,
+          label: `<b>${d.short}</b> — ${titleCase(r.university)}<br>${r.count.toLocaleString('id-ID')} pendaftar dari ${prov}`
+        };
+      })
+    ];
+
+    world.customLayerData(arcs).pointsData(points);
+    flyTo(origin.lat, origin.lng);
+    renderStatsByProv(prov, rows, fromProv, provTotal);
+  }
+
+  function flyTo(lat, lng) {
+    world.pointOfView({ lat: lat * 0.5 - 1, lng: lng, altitude: 0.5 }, 1100);
+  }
+
+  // ---------- Stats panel ----------
+  function renderStatsByUni(uni, rows, total) {
+    const u = UNIVERSITY_COORDS[uni];
+    const top = [...rows].sort((a, b) => b.count - a.count).slice(0, 5);
+    statsEl.innerHTML = `
+      <div class="stat-row"><span class="label">Total pendaftar</span><span class="value">${total.toLocaleString('id-ID')}</span></div>
+      <div class="stat-row"><span class="label">Kampus utama</span><span class="value">${u.city}</span></div>
+      <div class="stat-row"><span class="label">Provinsi asal</span><span class="value">${rows.length} dari 34</span></div>
+      <div class="top-list">
+        <div class="head">5 provinsi asal terbesar</div>
+        ${top.map((r, i) => `
+          <div class="top-item">
+            <span class="rank">${i + 1}</span>
+            <span class="name">${r.province}</span>
+            <span class="count">${r.count.toLocaleString('id-ID')}</span>
+            <span class="pct">${r.pct.toFixed(1)}%</span>
+          </div>`).join('')}
+      </div>
+    `;
+  }
+
+  function renderStatsByProv(prov, rows, fromProv, provTotal) {
+    const top = [...rows].sort((a, b) => b.count - a.count).slice(0, 5);
+    statsEl.innerHTML = `
+      <div class="stat-row"><span class="label">Pendaftar nasional</span><span class="value">${provTotal.toLocaleString('id-ID')}</span></div>
+      <div class="stat-row"><span class="label">Ke 22 PTN-BH</span><span class="value">${fromProv.toLocaleString('id-ID')} (${(fromProv/provTotal*100).toFixed(1)}%)</span></div>
+      <div class="stat-row"><span class="label">Universitas tujuan</span><span class="value">${rows.length} dari 22</span></div>
+      <div class="top-list">
+        <div class="head">5 PTN-BH tujuan terbesar</div>
+        ${top.map((r, i) => `
+          <div class="top-item">
+            <span class="rank">${i + 1}</span>
+            <span class="name">${UNIVERSITY_COORDS[r.university].short}</span>
+            <span class="count">${r.count.toLocaleString('id-ID')}</span>
+            <span class="pct">${(r.count / fromProv * 100).toFixed(1)}%</span>
+          </div>`).join('')}
+      </div>
+    `;
+  }
+
+  // Initial render
+  populateSelector();
+  update();
+})();
+</script>
+
+</body>
+</html>
