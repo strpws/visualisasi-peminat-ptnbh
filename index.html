@@ -497,11 +497,12 @@
 
     const arcs = rows.map(r => {
       const origin = PROVINCE_COORDS[r.province];
+      // Width = share of THIS uni's pool contributed by this province
       return {
         startLat: origin.lat, startLng: origin.lng,
         endLat:   dest.lat,   endLng:   dest.lng,
-        peakStroke: 0.15 + 1.1 * (r.count / maxCount),
-        label: `<b>${r.province} → ${UNIVERSITY_COORDS[uni].short}</b><br>${r.count.toLocaleString('id-ID')} pendaftar (${r.pct.toFixed(1)}%)`
+        peakStroke: 0.15 + 1.3 * (r.pct / 100),
+        label: `<b>${r.province} → ${UNIVERSITY_COORDS[uni].short}</b><br>${r.count.toLocaleString('id-ID')} pendaftar (${r.pct.toFixed(1)}% peminat ${UNIVERSITY_COORDS[uni].short})`
       };
     });
 
@@ -535,20 +536,21 @@
 
     const rows = UNIVERSITIES.map(u => {
       const c = countFor(u, prov);
-      return { university: u, count: c };
+      const uniTotal = universityTotal(u);
+      const shareOfUni = uniTotal ? (c / uniTotal * 100) : 0;
+      return { university: u, count: c, shareOfUni };
     }).filter(r => r.count > 0);
 
     const fromProv = rows.reduce((s, r) => s + r.count, 0);
-    const maxCount = rows.reduce((m, r) => Math.max(m, r.count), 1);
 
     const arcs = rows.map(r => {
       const dest = UNIVERSITY_COORDS[r.university];
-      const pctOfProv = fromProv ? (r.count / fromProv * 100) : 0;
+      // Width = share of the destination uni's pool contributed by this province
       return {
         startLat: origin.lat, startLng: origin.lng,
         endLat:   dest.lat,   endLng:   dest.lng,
-        peakStroke: 0.15 + 1.1 * (r.count / maxCount),
-        label: `<b>${prov} → ${dest.short}</b><br>${r.count.toLocaleString('id-ID')} pendaftar (${pctOfProv.toFixed(1)}% pilihan dari prov.)`
+        peakStroke: 0.15 + 1.3 * (r.shareOfUni / 100),
+        label: `<b>${prov} → ${dest.short}</b><br>${r.count.toLocaleString('id-ID')} pendaftar (${r.shareOfUni.toFixed(1)}% peminat ${dest.short})`
       };
     });
 
