@@ -31,6 +31,44 @@
     border-radius: 3px;
     padding: 22px 22px 18px;
     box-shadow: 0 6px 24px rgba(0, 0, 0, 0.08);
+    transition: width 0.2s ease, padding 0.2s ease;
+  }
+  #panel.collapsed {
+    width: auto;
+    min-width: 240px;
+    padding-bottom: 16px;
+  }
+  #panel.collapsed > *:not(.keyword):not(h1):not(.panel-toggle) {
+    display: none;
+  }
+  #panel.collapsed h1 { margin-bottom: 0; }
+
+  .panel-toggle {
+    display: block;
+    width: calc(100% + 44px);
+    margin: 18px -22px -18px;
+    border: none;
+    border-top: 1px solid #eee;
+    background: #f7f7f7;
+    color: #00599A;
+    font-family: 'PT Sans', sans-serif;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    padding: 12px 16px;
+    cursor: pointer;
+    text-align: center;
+    border-radius: 0 0 3px 3px;
+    transition: background 0.12s, color 0.12s;
+  }
+  .panel-toggle:hover {
+    background: #ececec;
+    color: #003e6b;
+  }
+  .panel-toggle:focus { outline: none; }
+  #panel.collapsed .panel-toggle {
+    margin-top: 14px;
   }
 
   .keyword {
@@ -220,6 +258,33 @@
   }
   #loading.hidden { opacity: 0; pointer-events: none; }
 
+  /* Data-point labels (htmlElementsData layer) */
+  .label-anchor { pointer-events: none; }
+  .point-label {
+    position: absolute;
+    left: 9px;
+    top: -10px;
+    font-family: 'PT Sans', sans-serif;
+    font-weight: 700;
+    font-size: 10px;
+    letter-spacing: 0.02em;
+    color: #1a1a1a;
+    background: rgba(255, 255, 255, 0.92);
+    padding: 2px 6px;
+    border-radius: 2px;
+    border: 1px solid rgba(0, 0, 0, 0.08);
+    white-space: nowrap;
+    user-select: none;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+  }
+  .point-label.focal {
+    background: #00599A;
+    color: #fff;
+    border-color: #00599A;
+    font-size: 11px;
+    padding: 3px 7px;
+  }
+
   /* Globe.gl tooltip override */
   .scene-tooltip {
     font-family: 'PT Sans', sans-serif !important;
@@ -254,6 +319,8 @@
   <select id="selector"></select>
 
   <div id="stats"></div>
+
+  <button class="panel-toggle" aria-label="Sembunyikan panel" title="Sembunyikan">Sembunyikan ▴</button>
 </div>
 
 <div id="footer">
@@ -293,7 +360,20 @@
     .polygonStrokeColor(() => 'rgba(0, 0, 0, 0.2)')
     .customLayerData([])
     .customThreeObject(d => buildTaperedArc(d))
-    .customLayerLabel(d => d.label);
+    .customLayerLabel(d => d.label)
+    .htmlElementsData([])
+    .htmlLat(d => d.lat)
+    .htmlLng(d => d.lng)
+    .htmlAltitude(0.01)
+    .htmlElement(d => {
+      const wrap = document.createElement('div');
+      wrap.className = 'label-anchor';
+      const span = document.createElement('span');
+      span.className = 'point-label' + (d.type === 'focal' ? ' focal' : '');
+      span.textContent = d.text;
+      wrap.appendChild(span);
+      return wrap;
+    });
 
   // ---------- Tapered arc builder ----------
   // Replaces Globe.gl's constant-width arcs with custom tubes:
@@ -398,6 +478,49 @@
     return new THREE.Mesh(geom, mat);
   }
 
+  // ---------- Visual spread for co-located destinations ----------
+  // Some universities sit on top of each other (UB/UM in Malang ~0.7km,
+  // UGM/UNY in Yogyakarta ~0.7km, ITS/UNAIR/UNESA in Surabaya). Greedy-
+  // cluster anything within `threshold` degrees and spread each cluster
+  // radially by `spreadRadius`. Real coords in data.js remain untouched.
+  function spreadOverlappingUnis(unis, threshold = 0.05, spreadRadius = 0.04) {
+    const clusters = [];
+    for (const u of unis) {
+      const c = UNIVERSITY_COORDS[u];
+      let cluster = null;
+      outer: for (const cl of clusters) {
+        for (const m of cl) {
+          const mc = UNIVERSITY_COORDS[m];
+          if (Math.hypot(c.lat - mc.lat, c.lng - mc.lng) < threshold) {
+            cluster = cl;
+            break outer;
+          }
+        }
+      }
+      if (cluster) cluster.push(u);
+      else clusters.push([u]);
+    }
+
+    const positions = {};
+    for (const cl of clusters) {
+      if (cl.length === 1) {
+        const c = UNIVERSITY_COORDS[cl[0]];
+        positions[cl[0]] = { lat: c.lat, lng: c.lng };
+      } else {
+        const cx = cl.reduce((s, u) => s + UNIVERSITY_COORDS[u].lat, 0) / cl.length;
+        const cy = cl.reduce((s, u) => s + UNIVERSITY_COORDS[u].lng, 0) / cl.length;
+        cl.forEach((u, i) => {
+          const angle = (i / cl.length) * Math.PI * 2 - Math.PI / 2;
+          positions[u] = {
+            lat: cx + spreadRadius * Math.cos(angle),
+            lng: cy + spreadRadius * Math.sin(angle)
+          };
+        });
+      }
+    }
+    return positions;
+  }
+
   // Indonesia-only province polygons (small + high-fidelity for the focus region).
   const GEO_SOURCES = [
     'https://cdn.jsdelivr.net/gh/superpikar/indonesia-geojson@master/indonesia-province-simple.json',
@@ -478,6 +601,16 @@
     update();
   });
 
+  // Panel collapse toggle
+  const panelEl = document.getElementById('panel');
+  const toggleBtn = panelEl.querySelector('.panel-toggle');
+  toggleBtn.addEventListener('click', () => {
+    const collapsed = panelEl.classList.toggle('collapsed');
+    toggleBtn.textContent = collapsed ? 'Tampilkan ▾' : 'Sembunyikan ▴';
+    toggleBtn.title = collapsed ? 'Tampilkan' : 'Sembunyikan';
+    toggleBtn.setAttribute('aria-label', collapsed ? 'Tampilkan panel' : 'Sembunyikan panel');
+  });
+
   // ---------- Render ----------
   function update() {
     if (mode === 'byUni') renderByUniversity(selection);
@@ -525,7 +658,16 @@
       }
     ];
 
-    world.customLayerData(arcs).pointsData(points);
+    const topLabels = [...rows].sort((a, b) => b.count - a.count).slice(0, 10);
+    const labelData = [
+      { lat: dest.lat, lng: dest.lng, text: UNIVERSITY_COORDS[uni].short, type: 'focal' },
+      ...topLabels.map(r => {
+        const o = PROVINCE_COORDS[r.province];
+        return { lat: o.lat, lng: o.lng, text: `${r.province} · ${r.pct.toFixed(1)}%`, type: 'origin' };
+      })
+    ];
+
+    world.customLayerData(arcs).pointsData(points).htmlElementsData(labelData);
     flyTo(dest.lat, dest.lng);
     renderStatsByUni(uni, rows, total);
   }
@@ -542,15 +684,18 @@
     }).filter(r => r.count > 0);
 
     const fromProv = rows.reduce((s, r) => s + r.count, 0);
+    const maxCount = rows.reduce((m, r) => Math.max(m, r.count), 1);
+    const displayCoords = spreadOverlappingUnis(rows.map(r => r.university));
 
     const arcs = rows.map(r => {
-      const dest = UNIVERSITY_COORDS[r.university];
+      const meta = UNIVERSITY_COORDS[r.university];
+      const dest = displayCoords[r.university];
       // Width = share of the destination uni's pool contributed by this province
       return {
         startLat: origin.lat, startLng: origin.lng,
         endLat:   dest.lat,   endLng:   dest.lng,
         peakStroke: 0.15 + 1.3 * (r.shareOfUni / 100),
-        label: `<b>${prov} → ${dest.short}</b><br>${r.count.toLocaleString('id-ID')} pendaftar (${r.shareOfUni.toFixed(1)}% peminat ${dest.short})`
+        label: `<b>${prov} → ${meta.short}</b><br>${r.count.toLocaleString('id-ID')} pendaftar (${r.shareOfUni.toFixed(1)}% peminat ${meta.short})`
       };
     });
 
@@ -562,18 +707,28 @@
         label: `<b>${prov}</b><br>Total ${provTotal.toLocaleString('id-ID')} pendaftar nasional`
       },
       ...rows.map(r => {
-        const d = UNIVERSITY_COORDS[r.university];
+        const meta = UNIVERSITY_COORDS[r.university];
+        const d = displayCoords[r.university];
         return {
           lat: d.lat, lng: d.lng,
           size: 0.001,
           radius: 0.015 + 0.05 * Math.sqrt(r.count / maxCount),
           color: POINT_UNIVERSITY,
-          label: `<b>${d.short}</b> — ${titleCase(r.university)}<br>${r.count.toLocaleString('id-ID')} pendaftar dari ${prov}`
+          label: `<b>${meta.short}</b> — ${titleCase(r.university)}<br>${r.count.toLocaleString('id-ID')} pendaftar dari ${prov}`
         };
       })
     ];
 
-    world.customLayerData(arcs).pointsData(points);
+    const topLabels = [...rows].sort((a, b) => b.count - a.count).slice(0, 10);
+    const labelData = [
+      { lat: origin.lat, lng: origin.lng, text: prov, type: 'focal' },
+      ...topLabels.map(r => {
+        const d = displayCoords[r.university];
+        return { lat: d.lat, lng: d.lng, text: `${UNIVERSITY_COORDS[r.university].short} · ${r.shareOfUni.toFixed(1)}%`, type: 'destination' };
+      })
+    ];
+
+    world.customLayerData(arcs).pointsData(points).htmlElementsData(labelData);
     flyTo(origin.lat, origin.lng);
     renderStatsByProv(prov, rows, fromProv, provTotal);
   }
@@ -585,13 +740,13 @@
   // ---------- Stats panel ----------
   function renderStatsByUni(uni, rows, total) {
     const u = UNIVERSITY_COORDS[uni];
-    const top = [...rows].sort((a, b) => b.count - a.count).slice(0, 5);
+    const top = [...rows].sort((a, b) => b.count - a.count).slice(0, 10);
     statsEl.innerHTML = `
       <div class="stat-row"><span class="label">Total pendaftar</span><span class="value">${total.toLocaleString('id-ID')}</span></div>
       <div class="stat-row"><span class="label">Kampus utama</span><span class="value">${u.city}</span></div>
       <div class="stat-row"><span class="label">Provinsi asal</span><span class="value">${rows.length} dari 34</span></div>
       <div class="top-list">
-        <div class="head">5 provinsi asal terbesar</div>
+        <div class="head">10 provinsi asal terbesar</div>
         ${top.map((r, i) => `
           <div class="top-item">
             <span class="rank">${i + 1}</span>
@@ -604,13 +759,13 @@
   }
 
   function renderStatsByProv(prov, rows, fromProv, provTotal) {
-    const top = [...rows].sort((a, b) => b.count - a.count).slice(0, 5);
+    const top = [...rows].sort((a, b) => b.count - a.count).slice(0, 10);
     statsEl.innerHTML = `
       <div class="stat-row"><span class="label">Pendaftar nasional</span><span class="value">${provTotal.toLocaleString('id-ID')}</span></div>
       <div class="stat-row"><span class="label">Ke 22 PTN-BH</span><span class="value">${fromProv.toLocaleString('id-ID')} (${(fromProv/provTotal*100).toFixed(1)}%)</span></div>
       <div class="stat-row"><span class="label">Universitas tujuan</span><span class="value">${rows.length} dari 22</span></div>
       <div class="top-list">
-        <div class="head">5 PTN-BH tujuan terbesar</div>
+        <div class="head">10 PTN-BH tujuan terbesar</div>
         ${top.map((r, i) => `
           <div class="top-item">
             <span class="rank">${i + 1}</span>
