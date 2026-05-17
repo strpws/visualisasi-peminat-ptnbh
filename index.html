@@ -341,6 +341,15 @@
   const POINT_PROVINCE  = '#00599A';
   const POINT_UNIVERSITY = '#F3C727';
 
+  // Choropleth uses sextile bins (5 cuts → 6 nonzero classes). Index 0 = zero,
+  // 1..5 = sextiles low→high landing on the brand blue #00599A, and index 6
+  // is a dedicated top tier (darker navy) so dominant provinces — Jabar,
+  // Jateng, Jatim, DKI in most selections — stand out from the rest of the
+  // high group instead of saturating at the same brand blue.
+  const CHORO_BIN_COLORS = ['#f0f0f0', '#d6e2ed', '#aac6dc', '#6ea5c6', '#2f7caf', '#00599A', '#003e6b'];
+  let choroValues = {};                 // geoName -> value, populated per render
+  let choroBreaks = [];                 // ascending quintile breakpoints (4 entries)
+
   let mode = 'byUni';         // 'byUni' | 'byProv'
   let selection = UNIVERSITIES[9]; // start with UI (Universitas Indonesia)
 
@@ -355,9 +364,10 @@
     .pointColor(d => d.color)
     .pointLabel(d => d.label)
     .polygonAltitude(0.004)
-    .polygonCapColor(() => '#e3e3e3')
+    .polygonCapColor(feat => choroColor(choroValues[feat.properties?.PROVINSI] || 0))
     .polygonSideColor(() => 'rgba(0, 0, 0, 0)')
-    .polygonStrokeColor(() => 'rgba(0, 0, 0, 0.2)')
+    .polygonStrokeColor(() => 'rgba(0, 0, 0, 0.25)')
+    .polygonLabel(feat => choroLabel(feat))
     .customLayerData([])
     .customThreeObject(d => buildTaperedArc(d))
     .customLayerLabel(d => d.label)
@@ -374,6 +384,67 @@
       wrap.appendChild(span);
       return wrap;
     });
+
+  // ---------- Choropleth ----------
+  // Recompute per render; in byUni mode each province is shaded by how many
+  // applicants it sent to the selected university, in byProv mode by the
+  // province's overall national applicant count (a static backdrop while
+  // arcs do the per-selection storytelling).
+  function choroColor(v) {
+    if (v <= 0) return CHORO_BIN_COLORS[0];
+    for (let i = 0; i < choroBreaks.length; i++) {
+      if (v < choroBreaks[i]) return CHORO_BIN_COLORS[i + 1];
+    }
+    return CHORO_BIN_COLORS[CHORO_BIN_COLORS.length - 1];
+  }
+
+  function choroLabel(feat) {
+    const geoName = feat.properties?.PROVINSI;
+    const provs = GEO_TO_PROVINCES[geoName];
+    if (!provs) return '';
+    const v = choroValues[geoName] || 0;
+    const context = (mode === 'byUni')
+      ? `pendaftar ke ${UNIVERSITY_COORDS[selection].short}`
+      : 'pendaftar nasional (semua PTN-BH)';
+    // Flag when the polygon represents a post-2022 split whose value comes
+    // from a single pre-split parent in the SNBT 2024 data.
+    const aggregated = provs.length === 1 && provs[0] !== geoName
+                       && geoName !== 'Daerah Istimewa Yogyakarta';
+    const footer = aggregated
+      ? `<br><span style="color:#888;font-size:11px">Data agregat sebagai ${provs[0]} (SNBT 2024)</span>`
+      : '';
+    return `<b>${geoName}</b><br>${v.toLocaleString('id-ID')} ${context}${footer}`;
+  }
+
+  function recomputeChoropleth() {
+    const valByProvince = {};
+    if (mode === 'byUni') {
+      for (const p of PROVINCES) valByProvince[p] = countFor(selection, p);
+    } else {
+      for (const p of PROVINCES) valByProvince[p] = PROVINCE_TOTALS[p] || 0;
+    }
+    choroValues = {};
+    for (const [geoName, provs] of Object.entries(GEO_TO_PROVINCES)) {
+      choroValues[geoName] = provs.reduce((s, p) => s + (valByProvince[p] || 0), 0);
+    }
+    // Quintile breakpoints over nonzero polygon values (4 cuts → 5 bins).
+    // Deduped first so identical Papua-split values don't collapse breakpoints.
+    const sorted = [...new Set(Object.values(choroValues).filter(v => v > 0))]
+                   .sort((a, b) => a - b);
+    choroBreaks = [];
+    const cuts = CHORO_BIN_COLORS.length - 1; // 5
+    if (sorted.length >= cuts) {
+      for (let i = 1; i < cuts; i++) {
+        const idx = Math.floor(sorted.length * i / cuts);
+        choroBreaks.push(sorted[Math.min(idx, sorted.length - 1)]);
+      }
+    } else {
+      // Fall back to evenly spaced cuts across whatever distinct values exist.
+      choroBreaks = sorted.slice(0, -1);
+    }
+    // Re-set the accessor so globe.gl repaints polygon caps.
+    world.polygonCapColor(feat => choroColor(choroValues[feat.properties?.PROVINSI] || 0));
+  }
 
   // ---------- Tapered arc builder ----------
   // Replaces Globe.gl's constant-width arcs with custom tubes:
@@ -521,18 +592,50 @@
     return positions;
   }
 
-  // Indonesia-only province polygons (small + high-fidelity for the focus region).
+  // Current 38-province GeoJSON bundled with the project (171 KB, modern
+  // boundaries). CDN sources kept as fallback in case the file isn't served
+  // (e.g. opening the HTML via file:// without a static server).
   const GEO_SOURCES = [
+    'indonesia-38-provinces.geojson',
     'https://cdn.jsdelivr.net/gh/superpikar/indonesia-geojson@master/indonesia-province-simple.json',
-    'https://cdn.jsdelivr.net/gh/superpikar/indonesia-geojson@master/indonesia-province.json',
     'https://cdn.jsdelivr.net/gh/superpikar/indonesia-geojson@master/indonesia.geojson'
   ];
+
+  // globe.gl (via three-conic-polygon-geometry) treats CCW exterior rings as
+  // holes and fills the *outside* — RFC 7946 compliant files therefore render
+  // as the entire globe minus each province. Force every exterior ring to CW
+  // at load time. (Holes/interior rings are then made CCW.)
+  function rewindToClockwise(features) {
+    for (const f of features) {
+      const g = f.geometry;
+      if (!g) continue;
+      const polys = g.type === 'MultiPolygon' ? g.coordinates
+                  : g.type === 'Polygon' ? [g.coordinates] : [];
+      for (const rings of polys) {
+        rings.forEach((ring, i) => {
+          const wantCW = i === 0;
+          if (ringIsClockwise(ring) !== wantCW) ring.reverse();
+        });
+      }
+    }
+  }
+  function ringIsClockwise(ring) {
+    let sum = 0;
+    for (let i = 0; i < ring.length - 1; i++) {
+      const [x1, y1] = ring[i];
+      const [x2, y2] = ring[i + 1];
+      sum += (x2 - x1) * (y2 + y1);
+    }
+    return sum > 0;
+  }
 
   (async () => {
     for (const url of GEO_SOURCES) {
       try {
         const geo = await fetch(url).then(r => r.ok ? r.json() : Promise.reject());
+        rewindToClockwise(geo.features);
         world.polygonsData(geo.features);
+        recomputeChoropleth();
         break;
       } catch (_) { /* try next source */ }
     }
@@ -543,12 +646,12 @@
   setTimeout(() => document.getElementById('loading').classList.add('hidden'), 6000);
 
   // Initial camera: tight on Indonesia
-  world.pointOfView({ lat: -2.5, lng: 117, altitude: 0.38 }, 0);
+  world.pointOfView({ lat: -2.5, lng: 117, altitude: 0.18 }, 0);
 
   // Auto-rotate (slow), stop on user interaction
   const controls = world.controls();
   controls.autoRotate = true;
-  controls.autoRotateSpeed = 0.35;
+  controls.autoRotateSpeed = -0.0875;
   ['mousedown', 'touchstart', 'wheel'].forEach(ev =>
     document.getElementById('globeViz').addEventListener(ev, () => controls.autoRotate = false, { passive: true })
   );
@@ -613,6 +716,7 @@
 
   // ---------- Render ----------
   function update() {
+    recomputeChoropleth();
     if (mode === 'byUni') renderByUniversity(selection);
     else                  renderByProvince(selection);
   }
@@ -734,7 +838,7 @@
   }
 
   function flyTo(lat, lng) {
-    world.pointOfView({ lat: lat * 0.5 - 1, lng: lng, altitude: 0.5 }, 1100);
+    world.pointOfView({ lat: lat * 0.5 - 1, lng: lng, altitude: 0.38 }, 1100);
   }
 
   // ---------- Stats panel ----------
