@@ -142,6 +142,53 @@ const PROVINCE_TOTALS = {
   "Sumatera Barat": 90322, "Sumatera Selatan": 48253, "Sumatera Utara": 99136
 };
 
+// Maps each polygon name in the bundled GeoJSON (current 38 provinces, via
+// the `PROVINSI` property) to the data.js province keys. SNBT 2024 data still
+// uses the pre-2022 34-province layout, so the four new Papua splits (Papua
+// Barat Daya, Papua Pegunungan, Papua Selatan, Papua Tengah) read from their
+// original parent's value — the choropleth shades the whole region uniformly
+// and the tooltip flags the aggregation.
+const GEO_TO_PROVINCES = {
+  "Aceh":                       ["Aceh"],
+  "Bali":                       ["Bali"],
+  "Banten":                     ["Banten"],
+  "Bengkulu":                   ["Bengkulu"],
+  "Daerah Istimewa Yogyakarta": ["DI Yogyakarta"],
+  "DKI Jakarta":                ["DKI Jakarta"],
+  "Gorontalo":                  ["Gorontalo"],
+  "Jambi":                      ["Jambi"],
+  "Jawa Barat":                 ["Jawa Barat"],
+  "Jawa Tengah":                ["Jawa Tengah"],
+  "Jawa Timur":                 ["Jawa Timur"],
+  "Kalimantan Barat":           ["Kalimantan Barat"],
+  "Kalimantan Selatan":         ["Kalimantan Selatan"],
+  "Kalimantan Tengah":          ["Kalimantan Tengah"],
+  "Kalimantan Timur":           ["Kalimantan Timur"],
+  "Kalimantan Utara":           ["Kalimantan Utara"],
+  "Kepulauan Bangka Belitung":  ["Kepulauan Bangka Belitung"],
+  "Kepulauan Riau":             ["Kepulauan Riau"],
+  "Lampung":                    ["Lampung"],
+  "Maluku":                     ["Maluku"],
+  "Maluku Utara":               ["Maluku Utara"],
+  "Nusa Tenggara Barat":        ["Nusa Tenggara Barat"],
+  "Nusa Tenggara Timur":        ["Nusa Tenggara Timur"],
+  "Papua":                      ["Papua"],
+  "Papua Barat":                ["Papua Barat"],
+  "Papua Barat Daya":           ["Papua Barat"],   // 2022 split
+  "Papua Pegunungan":           ["Papua"],         // 2022 split
+  "Papua Selatan":              ["Papua"],         // 2022 split
+  "Papua Tengah":               ["Papua"],         // 2022 split
+  "Riau":                       ["Riau"],
+  "Sulawesi Barat":             ["Sulawesi Barat"],
+  "Sulawesi Selatan":           ["Sulawesi Selatan"],
+  "Sulawesi Tengah":            ["Sulawesi Tengah"],
+  "Sulawesi Tenggara":          ["Sulawesi Tenggara"],
+  "Sulawesi Utara":             ["Sulawesi Utara"],
+  "Sumatera Barat":             ["Sumatera Barat"],
+  "Sumatera Selatan":           ["Sumatera Selatan"],
+  "Sumatera Utara":             ["Sumatera Utara"]
+};
+
 // Helpers
 function countFor(university, province) {
   const idx = PROVINCES.indexOf(province);
